@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام ادارة العهد</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap');
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #f8fafc;
+        }
+        .loader {
+            border-top-color: #0d9488;
+            animation: spinner 1.5s linear infinite;
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* تنسيق مستند الطباعة المالي المعزول والمنسق رسمياً للـ PDF */
+        @media print {
+            body > :not(#printTemplate) {
+                display: none !important;
+                height: 0 !important;
+                overflow: hidden !important;
+            }
+            #printTemplate {
+                display: block !important;
+                width: 100% !important;
+                height: auto !important;
+                overflow: visible !important;
+                background-color: #ffffff !important;
+                color: #000000 !important;
+            }
+        }
+    </style>
+</head>
+<body class="text-slate-800 flex h-screen overflow-hidden">
+
+    <!-- قالب الطباعة المالي المخصص والمنسق رسمياً (يظهر فقط في الطباعة أو الحفظ كـ PDF) -->
+    <div id="printTemplate" class="hidden w-full bg-white p-10 text-slate-900">
+        <!-- الترويسة الرسمية للشركة -->
+        <div class="flex justify-between items-center border-b-4 border-slate-800 pb-5 mb-8">
+            <div class="text-right">
+                <h1 class="text-2xl font-bold tracking-wide">كشف تسويات ومصروفات العهد المالية</h1>
+                <p class="text-xs text-slate-500 mt-1.5">التقرير صادر من نظام ادارة العهد المالية (حاجب سوفت)</p>
+            </div>
+            <div class="text-left text-xs text-slate-500 space-y-1">
+                <p><b>تاريخ التقرير:</b> <span id="printDate"></span></p>
+                <p><b>القسم:</b> <span id="printDept"></span></p>
+                <p><b>طبع بواسطة :</b> <span id="printApprover"></span></p>
+            </div>
+        </div>
+
+        <!-- خلاصة الأرقام في المستند المطبوع -->
+        <div class="grid grid-cols-3 gap-6 mb-8 text-center">
+            <div class="border border-slate-300 p-4 rounded-xl">
+                <p class="text-xs text-slate-500 font-semibold mb-1">إجمالي المبلغ الخاضع للتسوية</p>
+                <p class="text-lg font-bold text-slate-900" id="printTotalAmount">0.00 ر.س</p>
+            </div>
+            <div class="border border-slate-300 p-4 rounded-xl">
+                <p class="text-xs text-slate-500 font-semibold mb-1">إجمالي ضريبة القيمة المضافة (15%)</p>
+                <p class="text-lg font-bold text-slate-900" id="printTotalTax">0.00 ر.س</p>
+            </div>
+            <div class="border border-slate-300 p-4 rounded-xl">
+                <p class="text-xs text-slate-500 font-semibold mb-1">عدد الفواتير المرفقة بالكشف</p>
+                <p class="text-lg font-bold text-slate-900" id="printInvoicesCount">0</p>
+            </div>
+        </div>
+
+        <!-- جدول الحسابات الرسمي للطباعة -->
+        <table class="w-full text-right text-xs border-collapse border border-slate-300 mb-12">
+            <thead class="bg-slate-100 text-slate-700">
+                <tr>
+                    <th class="border border-slate-300 py-3 px-4">تاريخ العملية</th>
+                    <th class="border border-slate-300 py-3 px-4">الموظف المسؤول</th>
+                    <th class="border border-slate-300 py-3 px-4">القسم</th>
+                    <th class="border border-slate-300 py-3 px-4">المتجر وغرض الشراء</th>
+                    <th class="border border-slate-300 py-3 px-4">الرقم الضريبي</th>
+                    <th class="border border-slate-300 py-3 px-4 text-left">مبلغ الفاتورة</th>
+                    <th class="border border-slate-300 py-3 px-4 text-left">الضريبة</th>
+                </tr>
+            </thead>
+            <tbody id="printTableBody" class="divide-y divide-slate-200"></tbody>
+        </table>
+
+        <!-- خانات التواقيع والاعتماد القانوني للتقرير -->
+        <div class="grid grid-cols-2 gap-16 mt-16 text-center text-sm pt-8 border-t border-slate-200">
+            <div>
+                <p class="font-bold text-slate-800">توقيع المحاسب المالي المسؤول</p>
+                <p class="text-xs text-slate-400 mt-10">التوقيع: ............................................</p>
+            </div>
+            <div>
+                <p class="font-bold text-slate-800">اعتماد وتوقيع المدير المالي</p>
+                <p class="text-xs text-slate-400 mt-10">التوقيع والختم: ............................................</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة الانتظار وحماية تكرار الطلب -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center hidden">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center">
+            <div class="loader ease-linear rounded-full border-4 border-t-4 border-slate-100 h-14 w-14 mb-4"></div>
+            <p class="text-teal-800 font-bold text-lg" id="loadingText">جاري معالجة المعاملة...</p>
+            <p class="text-xs text-slate-400 mt-2">يرجى الانتظار وعدم إغلاق الصفحة لضمان سلامة قيد البيانات.</p>
+        </div>
+    </div>
+
+    <!-- نافذة التنبيهات السريعة -->
+    <div id="toast" class="fixed bottom-5 left-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-900 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center space-x-3 rtl:space-x-reverse">
+        <i id="toastIcon" class="fa-solid fa-circle-info"></i>
+        <span id="toastMsg"></span>
+    </div>
+
+    <!-- واجهة تسجيل الدخول -->
+    <div id="loginView" class="fixed inset-0 z-40 bg-slate-100 flex items-center justify-center px-4">
+        <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8 border border-slate-200">
+            <div class="text-center mb-8">
+                <div class="bg-teal-100 text-teal-600 inline-flex p-4 rounded-2xl mb-4">
+<img src="https://cdn.salla.sa/8VG3LrofZwOICRflslgrU6Nmrf6kIIjWV19JzS4h.png" width="100" height="100">
+                </div>
+                <h2 class="text-2xl font-bold text-slate-900">نظام إدارة العهد المالية</h2>
+                <p class="text-slate-400 mt-2 text-sm">من فضلك قم بتسجيل الدخول </p>
+            </div>
+            <form id="loginForm" class="space-y-5">
+                <div>
+                    <label class="block text-slate-700 text-sm font-semibold mb-1.5">اسم المستخدم</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+                            <i class="fa-solid fa-user"></i>
+                        </span>
+                        <input type="text" id="loginUser" required class="w-full pr-10 pl-3 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 transition">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-slate-700 text-sm font-semibold mb-1.5">كلمة المرور</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+                            <i class="fa-solid fa-lock"></i>
+                        </span>
+                        <input type="password" id="loginPass" required class="w-full pr-10 pl-3 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 transition">
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-teal-600/20">
+                    تسجيل الدخول
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- خلفية معتمة للهاتف عند فتح القائمة الجانبية -->
+    <div id="sidebarOverlay" onclick="toggleSidebar(false)" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"></div>
+
+    <!-- واجهة التطبيق الرئيسية (تم تعديل التجاوب مع الهاتف) -->
+    <div id="appContainer" class="hidden flex flex-1 h-full overflow-hidden">
+        
+        <!-- القائمة الجانبية (تم تعزيز حركة الإنزلاق والتجاوب) -->
+        <aside id="sidebar" class="no-print w-72 bg-slate-900 text-white flex flex-col justify-between fixed md:relative inset-y-0 right-0 z-40 transform translate-x-full md:translate-x-0 transition-transform duration-300">
+            <div class="flex flex-col">
+                <!-- شعار النظام ومعلومات المستخدم -->
+                <div class="p-6 border-b border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center space-x-3 rtl:space-x-reverse">
+                        <div class="bg-teal-500 p-2 rounded-xl text-white">
+                            <i class="fa-solid fa-money-check-dollar text-xl"></i>
+                        </div>
+                        <div>
+                            <h2 class="font-bold text-sm tracking-wide">HAJIB SOFT</h2>
+                            <span id="userRoleBadge" class="text-xs text-slate-400"></span>
+                        </div>
+                    </div>
+                    <!-- زر لإغلاق القائمة على الهواتف -->
+                    <button onclick="toggleSidebar(false)" class="md:hidden text-slate-400 hover:text-white p-1">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <!-- خيارات القائمة الجانبية للموظف -->
+                <nav id="userNav" class="hidden p-4 space-y-2">
+                    <button onclick="switchView('userDashboard')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition active">
+                        <i class="fa-solid fa-chart-pie"></i>
+                        <span>لوحة التحكم</span>
+                    </button>
+                    <button onclick="switchView('registerExpense')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                        <i class="fa-solid fa-file-invoice"></i>
+                        <span>تسجيل مصروف شراء</span>
+                    </button>
+                    <button onclick="switchView('custodyRequestsUser')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                        <i class="fa-solid fa-hourglass-half"></i>
+                        <span>طلبات العهد</span>
+                    </button>
+                    <button onclick="switchView('settingsView')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                        <i class="fa-solid fa-sliders"></i>
+                        <span>إعدادات الحساب</span>
+                    </button>
+                </nav>
+
+                <!-- خيارات القائمة الجانبية للمدير المالي -->
+                <nav id="managerNav" class="hidden p-4 space-y-2">
+                    <button onclick="switchView('managerDashboard')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition active">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <span>لوحة الإشراف المالي</span>
+                    </button>
+                    <button onclick="switchView('managerRequests')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <span>اعتمادات العهد الواردة</span>
+                    </button>
+                    <button onclick="switchView('managerReports')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                        <span>التقارير المالية المفصلة</span>
+                    </button>
+                    <button onclick="switchView('managerSettlements')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span>تسويات وإغلاق العهد</span>
+                    </button>
+                    <button onclick="switchView('managerLogs')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                        <i class="fa-solid fa-receipt"></i>
+                        <span>سجل عمليات النظام (Log)</span>
+                    </button>
+                    <button onclick="switchView('settingsView')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                        <i class="fa-solid fa-gears"></i>
+                        <span>الإعدادات وحسابات الموظفين</span>
+                    </button>
+                </nav>
+            </div>
+
+            <!-- معلومات الموظف الحالي وزر تسجيل الخروج -->
+            <div class="p-6 border-t border-slate-800 space-y-3">
+                <div class="text-xs text-slate-400">
+                    <p>المستخدم الحالي:</p>
+                    <p class="font-bold text-white text-sm mt-0.5" id="displayName"></p>
+                </div>
+                <button onclick="logout()" class="w-full bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white py-2 rounded-xl text-sm font-semibold transition flex items-center justify-center space-x-2 rtl:space-x-reverse">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                    <span>تسجيل الخروج</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- المحتوى الرئيسي للمشروع -->
+        <main class="flex-1 flex flex-col overflow-y-auto">
+            
+            <!-- شريط علوي فرعي للتجاوب والأدوات السريعة -->
+            <header class="no-print bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
+                <div class="flex items-center space-x-3 rtl:space-x-reverse">
+                    <!-- زر لإظهار القائمة الجانبية على الهواتف -->
+                    <button onclick="toggleSidebar(true)" class="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition">
+                        <i class="fa-solid fa-bars text-xl"></i>
+                    </button>
+                    <h3 class="text-lg md:text-xl font-bold text-slate-800" id="currentViewTitle">لوحة التحكم</h3>
+                </div>
+                <div class="flex items-center space-x-3 rtl:space-x-reverse">
+                    <span class="text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full font-semibold hidden sm:inline-block">تاريخ اليوم: <span id="currentDateVal"></span></span>
+                </div>
+            </header>
+
+            <!-- محتويات الصفحات والواجهات -->
+            <div class="p-4 md:p-8 flex-1">
+                
+                <!-- 1. لوحة الموظف الرئيسي -->
+                <section id="userDashboardSec" class="view-sec space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-white p-6 rounded-2xl border border-slate-200 flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-slate-400 font-semibold">رصيد عهدتك المالي الحالي</p>
+                                <h3 id="userBalance" class="text-3xl font-bold mt-1 text-teal-600">0.00 ر.س</h3>
+                            </div>
+                            <div class="p-4 bg-teal-50 text-teal-600 rounded-2xl">
+                                <i class="fa-solid fa-coins text-3xl"></i>
+                            </div>
+                        </div>
+                        <button onclick="openRequestCustodyModal()" class="bg-gradient-to-br from-teal-600 to-emerald-700 text-white p-6 rounded-2xl shadow-md hover:opacity-95 transition flex flex-col justify-between text-right">
+                            <span class="p-3 bg-white/20 rounded-xl inline-block max-w-max"><i class="fa-solid fa-plus-minus text-xl"></i></span>
+                            <div class="mt-4">
+                                <h4 class="font-bold text-lg">طلب عهدة مالية إضافية</h4>
+                                <p class="text-teal-100 text-xs mt-1">يُرسل الطلب تلقائياً لمديرك المالي المباشر للمراجعة والتسوية</p>
+                            </div>
+                        </button>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200">
+                        <h3 class="font-bold text-lg text-slate-800 mb-4">كشف المصروفات المسجلة حديثاً</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full text-right text-sm">
+                                <thead class="bg-slate-50 text-slate-500 border-b">
+                                    <tr>
+                                        <th class="py-3 px-4">التاريخ</th>
+                                        <th class="py-3 px-4">المتجر</th>
+                                        <th class="py-3 px-4">تفاصيل الشراء</th>
+                                        <th class="py-3 px-4">المبلغ الإجمالي</th>
+                                        <th class="py-3 px-4">الضريبة (15%)</th>
+                                        <th class="py-3 px-4">مستند الفاتورة</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="userRecentExpenses" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. تسجيل فاتورة مصروف جديد (للموظف) -->
+                <section id="registerExpenseSec" class="view-sec hidden max-w-xl bg-white p-6 md:p-8 rounded-3xl border border-slate-200 space-y-6">
+                    <h3 class="text-lg font-bold text-slate-800 mb-2 flex items-center space-x-2 rtl:space-x-reverse">
+                        <i class="fa-solid fa-upload text-teal-600"></i>
+                        <span>مصروف جديد</span>
+                    </h3>
+                    <form id="expenseForm" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-600 mb-1">اسم المتجر / مقدم الخدمة</label>
+                            <input type="text" id="expStoreName" required class="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-600 mb-1">الرقم الضريبي</label>
+                            <input type="text" id="expTaxNumber" class="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none" placeholder="مكون من 15 خانة" oninput="calculateTax()">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-600 mb-1">الإجمالي شامل الضريبة</label>
+                                <input type="number" id="expTotal" step="0.01" required class="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none" oninput="calculateTax()">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-400 mb-1">قيمة الضريبة (تلقائي)</label>
+                                <input type="number" id="expTaxVal" readonly class="w-full px-4 py-2 border bg-slate-50 text-slate-400 rounded-xl focus:outline-none">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-600 mb-1">توضيح وبند المصروف</label>
+                            <textarea id="expDetails" required class="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none" rows="2" placeholder="اكتب غرض الصرف بوضوح..."></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-600 mb-1">ملف الفاتورة (صور ومستندات PDF)</label>
+                            <input type="file" id="expFile" accept="image/*,application/pdf" required class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100">
+                        </div>
+                        <button type="submit" id="submitExpenseBtn" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-teal-600/15">
+                            تأكيد وقيد المصروف
+                        </button>
+                    </form>
+                </section>
+
+                <!-- 3. كشف حالات العهد للموظف -->
+                <section id="custodyRequestsUserSec" class="view-sec hidden bg-white p-6 rounded-2xl border border-slate-200">
+                    <h3 class="font-bold text-lg text-slate-800 mb-4">أرصدة وطلبات العهد السابقة للموظف</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-right text-sm">
+                            <thead class="bg-slate-50 text-slate-500 border-b">
+                                <tr>
+                                    <th class="py-3 px-4">رقم المعاملة</th>
+                                    <th class="py-3 px-4">تاريخ التقديم</th>
+                                    <th class="py-3 px-4">المبلغ المطلوب</th>
+                                    <th class="py-3 px-4">حالة الطلب</th>
+                                    <th class="py-3 px-4">المسؤول المعتمِد</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userRequestsTable" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 4. لوحة الإشراف المالي (للمدير) -->
+                <section id="managerDashboardSec" class="view-sec hidden space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-2xl border border-slate-200 flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-slate-400 font-semibold">إجمالي المصروفات </p>
+                                <h3 id="totalExpenses" class="text-2xl font-bold mt-1 text-rose-600">0.00 ر.س</h3>
+                            </div>
+                            <div class="p-3 bg-rose-50 text-rose-600 rounded-xl"><i class="fa-solid fa-arrow-trend-up text-lg"></i></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl border border-slate-200 flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-slate-400 font-semibold">ارصدة العهد</p>
+                                <h3 id="totalBalances" class="text-2xl font-bold mt-1 text-teal-600">0.00 ر.س</h3>
+                            </div>
+                            <div class="p-3 bg-teal-50 text-teal-600 rounded-xl"><i class="fa-solid fa-sack-dollar text-lg"></i></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl border border-slate-200 flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-slate-400 font-semibold">إجمالي المبالغ الضريبية</p>
+                                <h3 id="totalTaxes" class="text-2xl font-bold mt-1 text-indigo-600">0.00 ر.س</h3>
+                            </div>
+                            <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><i class="fa-solid fa-percent text-lg"></i></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200">
+                        <h3 class="font-bold text-lg text-slate-800 mb-4">HAJIB SOFT 2026|نظام ادارة العهد </h3>
+                        <div class="relative w-full h-[300px]">
+                            <canvas id="deptChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 5. مراجعة وتعديل طلبات العهد (للمدير) -->
+                <section id="managerRequestsSec" class="view-sec hidden bg-white p-6 rounded-2xl border border-slate-200">
+                    <h3 class="font-bold text-lg text-slate-800 mb-4 flex justify-between items-center">
+                        <span>طلبات تحويل الأرصدة والعهد</span>
+                        <span id="pendingCount" class="bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1 rounded-full">0 معلق</span>
+                    </h3>
+                    <div id="pendingRequestsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+                </section>
+
+                <!-- 6. التقارير المالية المتكاملة مع الطباعة وتصدير Excel -->
+                <section id="managerReportsSec" class="view-sec hidden space-y-6">
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 print-card" id="printableArea">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-slate-100 no-print">
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-800">التقارير المالية وحركات العهد التفصيلية</h3>
+                                <p class="text-sm text-slate-400">تابع حركة رصيد عهدة الموظف قبل كل عملية وبعدها بدقة</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2 mt-4 sm:mt-0">
+                                <select id="filterDept" onchange="filterReports()" class="border border-slate-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                                    <option value="All">جميع الأقسام</option>
+                                </select>
+                                <!-- تعديل تفعيل الدالة البرمجية الجديدة للطباعة الاحترافية -->
+                                <button onclick="printDetailedReport()" class="bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2 px-4 rounded-xl text-sm transition">
+                                    <i class="fa-solid fa-print ml-1"></i> طباعة كـ PDF
+                                </button>
+                                <button onclick="exportToCSV()" class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-xl text-sm transition">
+                                    <i class="fa-solid fa-file-csv ml-1"></i> تصدير إكسل (CSV)
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto mt-6">
+                            <table class="min-w-full text-right text-sm">
+                                <thead class="bg-slate-50 text-slate-500 border-b border-slate-200">
+                                    <tr>
+                                        <th class="py-3 px-4">التاريخ</th>
+                                        <th class="py-3 px-4">الموظف</th>
+                                        <th class="py-3 px-4">القسم</th>
+                                        <th class="py-3 px-4">المتجر / الغرض</th>
+                                        <th class="py-3 px-4">الرقم الضريبي</th>
+                                        <th class="py-3 px-4">الإجمالي</th>
+                                        <th class="py-3 px-4">الضريبة</th>
+                                        <th class="py-3 px-4">الرصيد قبل</th>
+                                        <th class="py-3 px-4">الرصيد بعد</th>
+                                        <th class="py-3 px-4 no-print">المستند</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="managerReportsTable" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 7. تسويات وإغلاق العهد (للمدير المالي فقط) -->
+                <section id="managerSettlementsSec" class="view-sec hidden bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
+                    <div>
+                        <h3 class="font-bold text-lg text-slate-800">قائمة تصفية حسابات وعهد الموظفين</h3>
+                        <p class="text-slate-400 text-sm">تسوية رصيد العهدة لصفر بنهاية الفترة المالية أو إغلاق الحساب</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-right text-sm">
+                            <thead class="bg-slate-50 text-slate-500 border-b">
+                                <tr>
+                                    <th class="py-3 px-4">اسم الموظف</th>
+                                    <th class="py-3 px-4">القسم</th>
+                                    <th class="py-3 px-4">الرصيد المعلق</th>
+                                    <th class="py-3 px-4">صلاحيات النظام</th>
+                                    <th class="py-3 px-4 text-center">إجراءات التسوية</th>
+                                </tr>
+                            </thead>
+                            <tbody id="settlementsTable" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 8. سجل عمليات النظام (Log) (للمدير المالي) -->
+                <section id="managerLogsSec" class="view-sec hidden bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
+                    <div>
+                        <h3 class="font-bold text-lg text-slate-800">سجل أحداث النظام والعمليات (System Log)</h3>
+                        <p class="text-slate-400 text-sm">مراقبة حية وحوكمة كاملة لكافة الأحداث والعمليات الفورية</p>
+                    </div>
+                    <div class="overflow-x-auto max-h-[500px]">
+                        <table class="min-w-full text-right text-sm">
+                            <thead class="bg-slate-50 text-slate-500 border-b">
+                                <tr>
+                                    <th class="py-3 px-4">الوقت والتاريخ</th>
+                                    <th class="py-3 px-4">الموظف</th>
+                                    <th class="py-3 px-4">نوع العملية</th>
+                                    <th class="py-3 px-4">التفاصيل الكاملة</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logsTable" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 9. الإعدادات، وإدارة حسابات المستخدمين الجديدة وتغيير كلمة المرور -->
+                <section id="settingsViewSec" class="view-sec hidden space-y-6 max-w-4xl">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- تغيير كلمة المرور للموظف الحالي -->
+                        <div class="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
+                            <h3 class="font-bold text-lg text-slate-800 border-b pb-2"><i class="fa-solid fa-lock text-slate-500 ml-1"></i> تغيير كلمة المرور الخاصة بك</h3>
+                            <form id="changePasswordForm" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm text-slate-600 mb-1">كلمة المرور الجديدة</label>
+                                    <input type="password" id="newPassVal" required class="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                                </div>
+                                <button type="submit" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">حفظ التعديل</button>
+                            </form>
+                        </div>
+
+                        <!-- إنشاء مستخدم جديد (متاح للمدير فقط) -->
+                        <div id="managerUserCreationCard" class="hidden bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
+                            <h3 class="font-bold text-lg text-slate-800 border-b pb-2"><i class="fa-solid fa-user-plus text-teal-600 ml-1"></i> تسجيل وإضافة موظف جديد بالمنصة</h3>
+                            <form id="addUserForm" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm text-slate-600 mb-1">اسم المستخدم</label>
+                                    <input type="text" id="newUsername" required class="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-slate-600 mb-1 font-semibold">القسم</label>
+                                    <input type="text" id="newDept" required class="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="مثال: التسويق، المبيعات">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-slate-600 mb-1">كلمة المرور الافتراضية</label>
+                                    <input type="password" id="newPassword" required class="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-slate-600 mb-1">صلاحية النظام</label>
+                                    <select id="newRole" class="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500">
+                                        <option value="User">موظف (مستخدم عادي)</option>
+                                        <option value="Manager">مدير مالي</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">إنشاء وحفظ الحساب</button>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- نافذة طلب عهدة جديدة (Modal) -->
+    <div id="requestModal" class="fixed inset-0 bg-slate-900/60 z-40 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <h3 class="text-lg font-bold text-slate-800 mb-4">تقديم طلب عهدة جديدة</h3>
+            <form id="custodyRequestForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm text-slate-600 mb-1">المبلغ المطلوب (ر.س)</label>
+                    <input type="number" id="reqAmount" required min="1" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                </div>
+                <div class="flex justify-end space-x-3 rtl:space-x-reverse">
+                    <button type="button" onclick="closeRequestCustodyModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold">إلغاء</button>
+                    <button type="submit" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">تأكيد الإرسال</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <script>
+        // رابط الـ API الخاص بـ Google Apps Script
+        const API_URL = "https://script.google.com/macros/s/AKfycbxHeJ0ZzXHNWGOFyyC85Hr4GdN4AkSDLSQuL-A5rHX2zNlvEcjZ6Ok8V_T27AdE8HIW/exec"; // ضع رابط الـ Web App الخاص بك هنا
+
+        // توثيق معلومات التلجرام
+        const TELEGRAM_TOKEN = "8787934719:AAHrCkMt1UWVwO1JFIM4KLDO6BpHaYf9hzc";
+        const TELEGRAM_CHAT_ID = "-1004439163881";
+
+        let currentUser = null;
+        let allExpensesGlobal = [];
+        let deptChartInstance = null;
+
+        window.onload = function() {
+            const savedUser = localStorage.getItem("custody_user");
+            
+            const today = new Date();
+            const formattedDate = today.toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById("currentDateVal").innerText = formattedDate;
+
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                loadAppView();
+            }
+        };
+
+        // دالة لإرسال التنبيهات مباشرة لشبكة Telegram عبر المتصفح لضمان وصولها بنسبة 100%
+        async function sendTelegramNotification(message) {
+            try {
+                await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        chat_id: TELEGRAM_CHAT_ID,
+                        text: message,
+                        parse_mode: "HTML"
+                    })
+                });
+            } catch (err) {
+                console.error("فشل إرسال إشعار تلجرام:", err);
+            }
+        }
+
+        // دالة حفظ العمليات بجدول السجل وإرسال الإشعار
+        async function logSystemAction(logAction, details) {
+            const timestamp = new Date().toLocaleString('ar-SA');
+            const tgMessage = `🔔 <b>إشعار من نظام العهد المالية</b>\n\n` +
+                              `<b>👤 القائم بالعملية:</b> ${currentUser.username}\n` +
+                              `<b>⚙️ نوع الإجراء:</b> ${logAction}\n` +
+                              `<b>📝 التفاصيل:</b> ${details}\n` +
+                              `<b>📅 التاريخ والوقت:</b> ${timestamp}`;
+            
+            sendTelegramNotification(tgMessage);
+
+            try {
+                await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "addSystemLog",
+                        username: currentUser.username,
+                        logAction: logAction,
+                        details: details
+                    })
+                });
+            } catch (e) {
+                console.error("خطأ في تدوين حركة السجل:", e);
+            }
+        }
+
+        // دالة تجميع وطباعة كشف مالي رسمي (تقرير PDF) بدلاً من طباعة الصفحة التقليدية
+        function printDetailedReport() {
+            const val = document.getElementById("filterDept").value;
+            const filtered = val === "All" ? (allExpensesGlobal || []) : (allExpensesGlobal || []).filter(e => e.department === val);
+
+            // تجميع معلومات الترويسة
+            document.getElementById("printDate").innerText = new Date().toLocaleString('ar-SA');
+            document.getElementById("printDept").innerText = val === "All" ? "جميع الأقسام الإدارية" : val;
+            document.getElementById("printApprover").innerText = currentUser ? currentUser.username : "غير معروف";
+
+            let totalExp = 0;
+            let totalTax = 0;
+            const tbody = document.getElementById("printTableBody");
+            tbody.innerHTML = "";
+
+            filtered.forEach(exp => {
+                totalExp += parseFloat(exp.totalAmount) || 0;
+                totalTax += parseFloat(exp.taxAmount) || 0;
+
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td class="border border-slate-300 py-2.5 px-3">${exp.date || ""}</td>
+                    <td class="border border-slate-300 py-2.5 px-3 font-semibold">${exp.username || ""}</td>
+                    <td class="border border-slate-300 py-2.5 px-3">${exp.department || ""}</td>
+                    <td class="border border-slate-300 py-2.5 px-3 font-semibold">${exp.storeName || ""} - <span class="text-[10px] text-slate-500 font-normal block mt-0.5">${exp.details || ""}</span></td>
+                    <td class="border border-slate-300 py-2.5 px-3">${exp.taxNumber || "-"}</td>
+                    <td class="border border-slate-300 py-2.5 px-3 text-left font-bold">${(parseFloat(exp.totalAmount) || 0).toFixed(2)} ر.س</td>
+                    <td class="border border-slate-300 py-2.5 px-3 text-left">${(parseFloat(exp.taxAmount) || 0).toFixed(2)} ر.س</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById("printTotalAmount").innerText = totalExp.toFixed(2) + " ر.س";
+            document.getElementById("printTotalTax").innerText = totalTax.toFixed(2) + " ر.س";
+            document.getElementById("printInvoicesCount").innerText = filtered.length;
+
+            // تنفيذ عملية الطباعة الفورية
+            window.print();
+        }
+
+        // إظهار وإخفاء القائمة الجانبية في شاشات الموبايل
+        function toggleSidebar(isOpen) {
+            const sidebar = document.getElementById("sidebar");
+            const overlay = document.getElementById("sidebarOverlay");
+            if (isOpen) {
+                sidebar.classList.remove("translate-x-full");
+                overlay.classList.remove("hidden");
+            } else {
+                sidebar.classList.add("translate-x-full");
+                overlay.classList.add("hidden");
+            }
+        }
+
+        function toggleLoader(show, text = "جاري تحميل البيانات...") {
+            const overlay = document.getElementById("loadingOverlay");
+            document.getElementById("loadingText").innerText = text;
+            if (show) {
+                overlay.classList.remove("hidden");
+            } else {
+                overlay.classList.add("hidden");
+            }
+        }
+
+        function showToast(message, type = "success") {
+            const toast = document.getElementById("toast");
+            const toastMsg = document.getElementById("toastMsg");
+            const toastIcon = document.getElementById("toastIcon");
+
+            toastMsg.innerText = message;
+            if (type === "success") {
+                toast.className = "fixed bottom-5 right-5 z-50 transform bg-emerald-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center space-x-3 rtl:space-x-reverse transition-all duration-300 opacity-100 translate-y-0";
+                toastIcon.className = "fa-solid fa-circle-check text-xl";
+            } else {
+                toast.className = "fixed bottom-5 right-5 z-50 transform bg-rose-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center space-x-3 rtl:space-x-reverse transition-all duration-300 opacity-100 translate-y-0";
+                toastIcon.className = "fa-solid fa-circle-exclamation text-xl";
+            }
+
+            setTimeout(() => {
+                toast.classList.add("opacity-0", "translate-y-20");
+            }, 3500);
+        }
+
+        // تسجيل الدخول
+        document.getElementById("loginForm").onsubmit = async function(e) {
+            e.preventDefault();
+            const username = document.getElementById("loginUser").value;
+            const password = document.getElementById("loginPass").value;
+
+            toggleLoader(true, "جاري التحقق من الهوية وصلاحيات المستخدم...");
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "login",
+                        username: username,
+                        password: password
+                    })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentUser = result;
+                    localStorage.setItem("custody_user", JSON.stringify(currentUser));
+                    showToast("أهلاً بك، تم تسجيل دخولك للنظام بنجاح", "success");
+                    loadAppView();
+                    logSystemAction("تسجيل دخول", `قام المستخدم بالدخول إلى النظام بنجاح بصلاحية: ${currentUser.role}`);
+                } else {
+                    showToast(result.message, "error");
+                }
+            } catch (err) {
+                showToast("حدث خطأ أثناء الاتصال بالخادم", "error");
+            } finally {
+                toggleLoader(false);
+            }
+        };
+
+        // تبديل تبويبات العرض بالكامل من السايدبار
+        function switchView(viewId) {
+            // إغلاق السايدبار تلقائياً عند النقر في الموبايل
+            toggleSidebar(false);
+
+            const sections = document.querySelectorAll(".view-sec");
+            sections.forEach(sec => sec.classList.add("hidden"));
+
+            const buttons = document.querySelectorAll(".nav-btn");
+            buttons.forEach(btn => btn.classList.remove("bg-slate-800", "text-white"));
+
+            let activeSec = null;
+
+            if (viewId === 'userDashboard') {
+                activeSec = document.getElementById("userDashboardSec");
+                loadUserDashboard();
+            } else if (viewId === 'registerExpense') {
+                activeSec = document.getElementById("registerExpenseSec");
+            } else if (viewId === 'custodyRequestsUser') {
+                activeSec = document.getElementById("custodyRequestsUserSec");
+                loadUserDashboard(); 
+            } else if (viewId === 'managerDashboard') {
+                activeSec = document.getElementById("managerDashboardSec");
+                loadManagerDashboard();
+            } else if (viewId === 'managerRequests') {
+                activeSec = document.getElementById("managerRequestsSec");
+                loadManagerDashboard();
+            } else if (viewId === 'managerReports') {
+                activeSec = document.getElementById("managerReportsSec");
+                loadManagerDashboard();
+            } else if (viewId === 'managerSettlements') {
+                activeSec = document.getElementById("managerSettlementsSec");
+                loadManagerDashboard();
+            } else if (viewId === 'managerLogs') {
+                activeSec = document.getElementById("managerLogsSec");
+                loadManagerDashboard();
+            } else if (viewId === 'settingsView') {
+                activeSec = document.getElementById("settingsViewSec");
+                if (currentUser.role === 'Manager') {
+                    document.getElementById("managerUserCreationCard").classList.remove("hidden");
+                } else {
+                    document.getElementById("managerUserCreationCard").classList.add("hidden");
+                }
+            }
+
+            if (activeSec) activeSec.classList.remove("hidden");
+            
+            const btnList = document.querySelectorAll(".nav-btn");
+            btnList.forEach(btn => {
+                if(btn.getAttribute("onclick").includes(viewId)) {
+                    btn.classList.add("bg-slate-800", "text-white");
+                    document.getElementById("currentViewTitle").innerText = btn.querySelector("span").innerText;
+                }
+            });
+        }
+
+        function loadAppView() {
+            document.getElementById("loginView").classList.add("hidden");
+            document.getElementById("appContainer").classList.remove("hidden");
+            document.getElementById("displayName").innerText = currentUser.username;
+            document.getElementById("userRoleBadge").innerText = currentUser.role === "Manager" ? "إدارة مالية" : "موظف مالي";
+
+            if (currentUser.role === "Manager") {
+                document.getElementById("managerNav").classList.remove("hidden");
+                document.getElementById("userNav").classList.add("hidden");
+                switchView('managerDashboard');
+            } else {
+                document.getElementById("userNav").classList.remove("hidden");
+                document.getElementById("managerNav").classList.add("hidden");
+                switchView('userDashboard');
+            }
+        }
+
+        function logout() {
+            logSystemAction("تسجيل خروج", "قام المستخدم بتسجيل خروجه من النظام.");
+            localStorage.removeItem("custody_user");
+            currentUser = null;
+            document.getElementById("appContainer").classList.add("hidden");
+            document.getElementById("loginView").classList.remove("hidden");
+            document.getElementById("loginForm").reset();
+        }
+
+        function calculateTax() {
+            const taxNo = document.getElementById("expTaxNumber").value.trim();
+            const total = parseFloat(document.getElementById("expTotal").value) || 0;
+            const taxInput = document.getElementById("expTaxVal");
+
+            if (taxNo.length > 0 && total > 0) {
+                const baseAmount = total / 1.15;
+                const calculatedTax = total - baseAmount;
+                taxInput.value = calculatedTax.toFixed(2);
+            } else {
+                taxInput.value = "0.00";
+            }
+        }
+
+        // جلب وتحديث بيانات الموظف
+        async function loadUserDashboard() {
+            toggleLoader(true, "جاري جلب تحديث العهدة والعمليات السابقة...");
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "getUserData",
+                        username: currentUser.username
+                    })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById("userBalance").innerText = result.balance.toFixed(2) + " ر.س";
+                    
+                    if (result.balance < 0) {
+                        document.getElementById("userBalance").className = "text-3xl font-bold mt-1 text-rose-600";
+                    } else {
+                        document.getElementById("userBalance").className = "text-3xl font-bold mt-1 text-teal-600";
+                    }
+
+                    const tbodyRecent = document.getElementById("userRecentExpenses");
+                    tbodyRecent.innerHTML = "";
+                    result.expenses.reverse().forEach(exp => {
+                        const tr = document.createElement("tr");
+                        tr.className = "hover:bg-slate-50 transition border-b";
+                        tr.innerHTML = `
+                            <td class="py-3.5 px-4 text-xs">${exp.date}</td>
+                            <td class="py-3.5 px-4 font-semibold">${exp.storeName}</td>
+                            <td class="py-3.5 px-4 text-slate-500">${exp.details}</td>
+                            <td class="py-3.5 px-4 font-bold text-slate-900">${exp.totalAmount.toFixed(2)} ر.س</td>
+                            <td class="py-3.5 px-4 text-slate-400">${exp.taxAmount.toFixed(2)} ر.س</td>
+                            <td class="py-3.5 px-4">
+                                ${exp.imageUrl ? `<a href="${exp.imageUrl}" target="_blank" class="text-teal-600 hover:text-teal-800"><i class="fa-solid fa-paperclip text-lg"></i></a>` : '<span class="text-slate-300">-</span>'}
+                            </td>
+                        `;
+                        tbodyRecent.appendChild(tr);
+                    });
+
+                    const tbodyRequests = document.getElementById("userRequestsTable");
+                    tbodyRequests.innerHTML = "";
+                    result.requests.reverse().forEach(req => {
+                        let statusBadge = "";
+                        if (req.status === "مقبول") {
+                            statusBadge = `<span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">مقبول</span>`;
+                        } else if (req.status === "مرفوض") {
+                            statusBadge = `<span class="bg-rose-100 text-rose-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">مرفوض</span>`;
+                        } else {
+                            statusBadge = `<span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">معلق</span>`;
+                        }
+
+                        const tr = document.createElement("tr");
+                        tr.className = "hover:bg-slate-50 border-b";
+                        tr.innerHTML = `
+                            <td class="py-3 px-4 font-semibold text-xs text-slate-500">${req.requestId}</td>
+                            <td class="py-3 px-4 text-xs">${req.date}</td>
+                            <td class="py-3 px-4 font-bold text-teal-600">${req.amount.toFixed(2)} ر.س</td>
+                            <td class="py-3 px-4">${statusBadge}</td>
+                            <td class="py-3 px-4 text-slate-500 font-semibold text-xs">${req.approver}</td>
+                        `;
+                        tbodyRequests.appendChild(tr);
+                    });
+                }
+            } catch (err) {
+                showToast("تعذر جلب بيانات العهدة ومزامنة الطلبات السابقة", "error");
+            } finally {
+                toggleLoader(false);
+            }
+        }
+
+        // قيد المصروف مع حماية تكرار الطلب
+        document.getElementById("expenseForm").onsubmit = async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById("submitExpenseBtn");
+            submitBtn.disabled = true;
+
+            const storeName = document.getElementById("expStoreName").value;
+            const taxNo = document.getElementById("expTaxNumber").value;
+            const total = document.getElementById("expTotal").value;
+            const taxVal = document.getElementById("expTaxVal").value;
+            const details = document.getElementById("expDetails").value;
+            const fileInput = document.getElementById("expFile");
+
+            if (fileInput.files.length === 0) {
+                showToast("يرجى إرفاق صورة الفاتورة أو مستند PDF لإتمام القيد", "error");
+                submitBtn.disabled = false;
+                return;
+            }
+
+            toggleLoader(true, "جاري رفع المستند وتوثيق المعاملة...");
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            
+            reader.onload = async function() {
+                const base64 = reader.result;
+                try {
+                    const response = await fetch(API_URL, {
+                        method: "POST",
+                        body: JSON.stringify({
+                            action: "addExpense",
+                            username: currentUser.username,
+                            storeName: storeName,
+                            taxNumber: taxNo,
+                            totalAmount: total,
+                            taxAmount: taxVal,
+                            details: details,
+                            imageBytes: base64,
+                            imageName: file.name
+                        })
+                    });
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showToast(result.message, "success");
+                        document.getElementById("expenseForm").reset();
+                        // إرسال الإشعار والتسجيل
+                        logSystemAction("تسجيل مصروف", `قيد مصروف شراء من ${storeName} بقيمة ${total} ر.س ومرفق به مستند الفاتورة.`);
+                        switchView('userDashboard'); 
+                    } else {
+                        showToast(result.message, "error");
+                    }
+                } catch (err) {
+                    showToast("فشلت عملية حفظ المصروف والمرفق", "error");
+                } finally {
+                    submitBtn.disabled = false;
+                    toggleLoader(false);
+                }
+            };
+            
+            reader.readAsDataURL(file);
+        };
+
+        function openRequestCustodyModal() { document.getElementById("requestModal").classList.remove("hidden"); }
+        function closeRequestCustodyModal() { document.getElementById("requestModal").classList.add("hidden"); }
+        function openAddUserModal() { document.getElementById("addUserModal").classList.remove("hidden"); }
+        function closeAddUserModal() { document.getElementById("addUserModal").classList.add("hidden"); }
+        function openChangePasswordModal() { document.getElementById("changePasswordModal").classList.remove("hidden"); }
+        function closeChangePasswordModal() { document.getElementById("changePasswordModal").classList.add("hidden"); }
+
+        // تقديم طلب عهدة جديدة
+        document.getElementById("custodyRequestForm").onsubmit = async function(e) {
+            e.preventDefault();
+            const amount = parseFloat(document.getElementById("reqAmount").value);
+            toggleLoader(true, "جاري إرسال طلب العهدة للمدير المالي...");
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "requestCustody",
+                        username: currentUser.username,
+                        department: currentUser.department,
+                        amount: amount
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, "success");
+                    closeRequestCustodyModal();
+                    document.getElementById("custodyRequestForm").reset();
+                    // إشعار
+                    logSystemAction("طلب عهدة جديدة", `قدّم الموظف طلب الحصول على عهدة مالية جديدة بقيمة ${amount.toFixed(2)} ر.س بانتظار الاعتماد.`);
+                    switchView('custodyRequestsUser');
+                } else {
+                    showToast(result.message, "error");
+                }
+            } catch (err) {
+                showToast("تعذر إرسال طلب العهدة", "error");
+            } finally {
+                toggleLoader(false);
+            }
+        };
+
+        // تصفية وإغلاق العهد من قبل المدير
+        function confirmCloseCustody(username) {
+            if (confirm(`هل أنت متأكد من تسوية وإغلاق العهدة للموظف: ${username} وتصفير حسابه؟`)) {
+                executeCloseCustody(username);
+            }
+        }
+
+        async function executeCloseCustody(username) {
+            toggleLoader(true, "جاري تسوية الحساب وإرجاع العهدة لصفر...");
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "closeCustody",
+                        username: username,
+                        manager: currentUser.username
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, "success");
+                    logSystemAction("تصفية عهدة موظف", `قام المدير بتسوية حساب عهدة الموظف: ${username} وتصفير الرصيد المتاح.`);
+                    loadManagerDashboard();
+                } else {
+                    showToast(result.message, "error");
+                }
+            } catch (err) {
+                showToast("حدث خطأ أثناء إجراء التسوية", "error");
+            } finally {
+                toggleLoader(false);
+            }
+        }
+
+        // تغيير كلمة المرور
+        document.getElementById("changePasswordForm").onsubmit = async function(e) {
+            e.preventDefault();
+            const newPass = document.getElementById("newPassVal").value;
+            toggleLoader(true, "جاري حفظ وتحديث كلمة المرور الحالية...");
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "changePassword",
+                        username: currentUser.username,
+                        newPassword: newPass
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, "success");
+                    closeChangePasswordModal();
+                    document.getElementById("changePasswordForm").reset();
+                    logSystemAction("تغيير كلمة المرور", "تم تغيير وتحديث كلمة المرور الخاصة بحسابه بنجاح.");
+                } else {
+                    showToast(result.message, "error");
+                }
+            } catch (err) {
+                showToast("تعذر تحديث كلمة المرور الجديدة", "error");
+            } finally {
+                toggleLoader(false);
+            }
+        };
+
+        // إنشاء مستخدم جديد
+        document.getElementById("addUserForm").onsubmit = async function(e) {
+            e.preventDefault();
+            const user = document.getElementById("newUsername").value;
+            const pass = document.getElementById("newPassword").value;
+            const dept = document.getElementById("newDept").value;
+            const role = document.getElementById("newRole").value;
+
+            toggleLoader(true, "جاري تهيئة إعداد الحساب وقيد السجل الجديد...");
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "addUser",
+                        username: user,
+                        password: pass,
+                        department: dept,
+                        role: role,
+                        creator: currentUser.username
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, "success");
+                    document.getElementById("addUserForm").reset();
+                    logSystemAction("إنشاء مستخدم جديد", `تم إنشاء وتفعيل حساب مالي جديد للموظف: ${user} بالقسم: ${dept}`);
+                    loadManagerDashboard();
+                } else {
+                    showToast(result.message, "error");
+                }
+            } catch (err) {
+                showToast("فشلت عملية إنشاء الحساب المالي للمستخدم", "error");
+            } finally {
+                toggleLoader(false);
+            }
+        };
+
+        // تحميل وتحديث بيانات الإشراف المالي للمدير
+        async function loadManagerDashboard() {
+            toggleLoader(true, "جاري تحديث التقارير والأرصدة العامة...");
+            try {
+                const resReq = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({ action: "getCustodyRequests" })
+                });
+                const resultReq = await resReq.json();
+
+                const resData = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({ action: "getManagerData" })
+                });
+                const resultData = await resData.json();
+
+                if (resultReq.success && resultData.success) {
+                    allExpensesGlobal = resultData.expenses;
+                    
+                    renderPendingRequests(resultReq.requests);
+                    updateDashboardCards(resultData);
+                    updateDeptFilter(resultData.expenses);
+                    renderReportsTable(resultData.expenses);
+                    renderDepartmentChart(resultData.expenses);
+                    renderSettlementsTable(resultData.users);
+                    renderLogsTable(resultData.logs);
+                }
+            } catch (err) {
+                showToast("فشل تواصل الخادم وجلب البيانات الحالية", "error");
+            } finally {
+                toggleLoader(false);
+            }
+        }
+
+        function renderPendingRequests(requests) {
+            const listContainer = document.getElementById("pendingRequestsList");
+            listContainer.innerHTML = "";
+            const pending = requests.filter(r => r.status === "معلق");
+            
+            document.getElementById("pendingCount").innerText = `${pending.length} معلق`;
+
+            if (pending.length === 0) {
+                listContainer.innerHTML = `<p class="col-span-full text-slate-400 text-sm text-center py-12">لا توجد طلبات عهد تحتاج للاعتماد حالياً.</p>`;
+                return;
+            }
+
+            pending.reverse().forEach(req => {
+                const item = document.createElement("div");
+                item.className = "bg-slate-50 p-6 rounded-2xl border border-slate-200 flex flex-col justify-between";
+                // تم وضع متغير req.amount في علامة اقتباس فردية لضمان الاستقرار والتجاوب التام وعدم كسر كود HTML
+                item.innerHTML = `
+                    <div class="mb-4">
+                        <h4 class="font-bold text-slate-800 text-base mb-1">${req.username}</h4>
+                        <span class="text-xs bg-slate-200 text-slate-600 px-2.5 py-0.5 rounded-full font-semibold">${req.department}</span>
+                        <p class="text-xs text-slate-400 mt-3">المبلغ المطلوب تعزيزه:</p>
+                        <span class="text-teal-600 font-bold text-xl">${req.amount.toFixed(2)} ر.س</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="handleRequest('${req.requestId}', 'مقبول', '${req.amount}')" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold py-2 rounded-xl transition">قبول</button>
+                        <button onclick="handleRequest('${req.requestId}', 'مرفوض', '${req.amount}')" class="bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold py-2 rounded-xl transition">رفض</button>
+                    </div>
+                `;
+                listContainer.appendChild(item);
+            });
+        }
+
+        async function handleRequest(requestId, status, amount) {
+            toggleLoader(true, "جاري تعديل قيد طلب العهدة وتسجيل الاعتماد...");
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "handleCustodyRequest",
+                        requestId: requestId,
+                        status: status,
+                        approver: currentUser.username
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, "success");
+                    logSystemAction("معالجة طلب عهدة", `تم تعديل حالة طلب العهدة رقم ${requestId} ليكون (${status}) بمبلغ قيمته ${parseFloat(amount).toFixed(2)} ر.س`);
+                    loadManagerDashboard();
+                } else {
+                    showToast(result.message, "error");
+                }
+            } catch (err) {
+                showToast("تعذر معالجة الطلب على الخادم", "error");
+            } finally {
+                toggleLoader(false);
+            }
+        }
+
+        function updateDashboardCards(data) {
+            let totalExp = 0;
+            let totalTax = 0;
+            data.expenses.forEach(e => {
+                totalExp += e.totalAmount;
+                totalTax += e.taxAmount;
+            });
+
+            let totalBal = 0;
+            data.users.forEach(u => {
+                totalBal += u.balance;
+            });
+
+            document.getElementById("totalExpenses").innerText = totalExp.toFixed(2) + " ر.س";
+            document.getElementById("totalBalances").innerText = totalBal.toFixed(2) + " ر.س";
+            document.getElementById("totalTaxes").innerText = totalTax.toFixed(2) + " ر.س";
+        }
+
+        function updateDeptFilter(expenses) {
+            const select = document.getElementById("filterDept");
+            const depts = ["All"];
+            expenses.forEach(e => {
+                if (!depts.includes(e.department)) {
+                    depts.push(e.department);
+                }
+            });
+
+            const currentSelected = select.value;
+            select.innerHTML = "";
+            depts.forEach(d => {
+                const opt = document.createElement("option");
+                opt.value = d;
+                opt.innerText = d === "All" ? "جميع الأقسام" : d;
+                select.appendChild(opt);
+            });
+            select.value = currentSelected || "All";
+        }
+
+        function filterReports() {
+            const val = document.getElementById("filterDept").value;
+            if (val === "All") {
+                renderReportsTable(allExpensesGlobal);
+            } else {
+                const filtered = allExpensesGlobal.filter(e => e.department === val);
+                renderReportsTable(filtered);
+            }
+        }
+
+        function renderReportsTable(expenses) {
+            const tbody = document.getElementById("managerReportsTable");
+            tbody.innerHTML = "";
+
+            expenses.slice().reverse().forEach(exp => {
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-50 border-b border-slate-100";
+                tr.innerHTML = `
+                    <td class="py-3.5 px-4 text-xs text-slate-500">${exp.date}</td>
+                    <td class="py-3.5 px-4 font-semibold text-slate-800">${exp.username}</td>
+                    <td class="py-3.5 px-4 text-slate-400 font-medium">${exp.department}</td>
+                    <td class="py-3.5 px-4 font-semibold">${exp.storeName} <span class="text-xs text-slate-400 block font-normal mt-0.5">${exp.details}</span></td>
+                    <td class="py-3.5 px-4 text-slate-500">${exp.taxNumber || "-"}</td>
+                    <td class="py-3.5 px-4 font-bold text-slate-900">${exp.totalAmount.toFixed(2)} ر.س</td>
+                    <td class="py-3.5 px-4 text-slate-400">${exp.taxAmount.toFixed(2)} ر.س</td>
+                    <td class="py-3.5 px-4 text-indigo-600 font-semibold">${exp.balanceBefore.toFixed(2)} ر.س</td>
+                    <td class="py-3.5 px-4 font-semibold ${exp.balanceAfter < 0 ? 'text-rose-600':'text-emerald-600'}">${exp.balanceAfter.toFixed(2)} ر.س</td>
+                    <td class="py-3.5 px-4 no-print">
+                        ${exp.imageUrl ? `<a href="${exp.imageUrl}" target="_blank" class="text-teal-600 hover:text-teal-800"><i class="fa-solid fa-paperclip text-lg"></i></a>` : '<span class="text-slate-300">-</span>'}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderSettlementsTable(users) {
+            const tbody = document.getElementById("settlementsTable");
+            tbody.innerHTML = "";
+
+            users.forEach(user => {
+                if (user.username === currentUser.username) return;
+
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-50 border-b border-slate-100";
+                tr.innerHTML = `
+                    <td class="py-4 px-4 font-semibold text-slate-800">${user.username}</td>
+                    <td class="py-4 px-4 text-slate-500">${user.department}</td>
+                    <td class="py-4 px-4 font-bold ${user.balance < 0 ? 'text-rose-600':'text-teal-600'}">${user.balance.toFixed(2)} ر.س</td>
+                    <td class="py-4 px-4"><span class="bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full text-xs font-semibold">${user.role === 'Manager' ? 'مدير مالي':'موظف مالي'}</span></td>
+                    <td class="py-4 px-4 text-center">
+                        <button onclick="confirmCloseCustody('${user.username}')" class="bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold transition">
+                            <i class="fa-solid fa-square-poll-vertical ml-1"></i> تصفية وإغلاق العهدة
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderLogsTable(logs) {
+            const tbody = document.getElementById("logsTable");
+            tbody.innerHTML = "";
+
+            if (!logs || logs.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="py-6 text-slate-400 text-sm text-center">لا توجد سجلات بالنظام بعد.</td></tr>`;
+                return;
+            }
+
+            logs.forEach(log => {
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-50 border-b border-slate-100 text-xs";
+                tr.innerHTML = `
+                    <td class="py-3 px-4 text-slate-400 font-semibold">${log.date}</td>
+                    <td class="py-3 px-4 font-semibold text-slate-700">${log.user}</td>
+                    <td class="py-3 px-4 text-teal-600 font-bold">${log.action}</td>
+                    <td class="py-3 px-4 text-slate-500 font-medium">${log.details}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderDepartmentChart(expenses) {
+            const ctx = document.getElementById('deptChart').getContext('2d');
+            const deptData = {};
+            expenses.forEach(e => {
+                if (!deptData[e.department]) {
+                    deptData[e.department] = 0;
+                }
+                deptData[e.department] += e.totalAmount;
+            });
+
+            const labels = Object.keys(deptData);
+            const data = Object.values(deptData);
+
+            if (deptChartInstance) {
+                deptChartInstance.destroy();
+            }
+
+            deptChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'إجمالي المشتريات (ر.س)',
+                        data: data,
+                        backgroundColor: 'rgba(13, 148, 136, 0.7)',
+                        borderColor: 'rgba(13, 148, 136, 1)',
+                        borderWidth: 1.5,
+                        borderRadius: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function exportToCSV() {
+            if (allExpensesGlobal.length === 0) {
+                showToast("لا توجد فواتير لتصدير كشف الحساب حالياً", "error");
+                return;
+            }
+
+            let csvContent = "\uFEFF"; 
+            csvContent += "تاريخ القيد,الموظف,القسم,المتجر,الرقم الضريبي,الإجمالي,الضريبة,الرصيد قبل المصروف,الرصيد بعد المصروف,التفاصيل\n";
+
+            allExpensesGlobal.forEach(e => {
+                const row = [
+                    e.date,
+                    e.username,
+                    e.department,
+                    e.storeName,
+                    e.taxNumber,
+                    e.totalAmount,
+                    e.taxAmount,
+                    e.balanceBefore,
+                    e.balanceAfter,
+                    e.details.replace(/,/g, " ") 
+                ].join(",");
+                csvContent += row + "\n";
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `تقرير_العهد_المالية_المفصل_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
