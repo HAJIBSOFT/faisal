@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نظام إدارة العهد المالية المطور</title>
+    <title>نظام ادارة العهد</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -50,12 +50,12 @@
         <div class="flex justify-between items-center border-b-4 border-slate-800 pb-5 mb-8">
             <div class="text-right">
                 <h1 class="text-2xl font-bold tracking-wide">كشف تسويات ومصروفات العهد المالية</h1>
-                <p class="text-xs text-slate-500 mt-1.5">التقرير صادر رسمياً عن الإدارة المالية والمحاسبية</p>
+                <p class="text-xs text-slate-500 mt-1.5">التقرير صادر من نظام ادارة العهد المالية (حاجب سوفت)</p>
             </div>
             <div class="text-left text-xs text-slate-500 space-y-1">
-                <p><b>تاريخ الاستخراج:</b> <span id="printDate"></span></p>
-                <p><b>القسم المستهدف:</b> <span id="printDept"></span></p>
-                <p><b>المشرف المعتمد للتقرير:</b> <span id="printApprover"></span></p>
+                <p><b>تاريخ التقرير:</b> <span id="printDate"></span></p>
+                <p><b>القسم:</b> <span id="printDept"></span></p>
+                <p><b>طبع بواسطة :</b> <span id="printApprover"></span></p>
             </div>
         </div>
 
@@ -124,10 +124,10 @@
         <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8 border border-slate-200">
             <div class="text-center mb-8">
                 <div class="bg-teal-100 text-teal-600 inline-flex p-4 rounded-2xl mb-4">
-                    <i class="fa-solid fa-vault text-4xl"></i>
+                    <img src="https://cdn.salla.sa/8VG3LrofZwOICRflslgrU6Nmrf6kIIjWV19JzS4h.png" width="100" height="100">
                 </div>
                 <h2 class="text-2xl font-bold text-slate-900">نظام إدارة العهد المالية</h2>
-                <p class="text-slate-400 mt-2 text-sm">أدخل بيانات الدخول المعتمدة للوصول للنظام</p>
+                <p class="text-slate-400 mt-2 text-sm">من فضلك قم بتسجيل الدخول </p>
             </div>
             <form id="loginForm" class="space-y-5">
                 <div>
@@ -171,7 +171,7 @@
                             <i class="fa-solid fa-money-check-dollar text-xl"></i>
                         </div>
                         <div>
-                            <h2 class="font-bold text-sm tracking-wide">العهد والمدفوعات</h2>
+                            <h2 class="font-bold text-sm tracking-wide">HAJIB SOFT</h2>
                             <span id="userRoleBadge" class="text-xs text-slate-400"></span>
                         </div>
                     </div>
@@ -193,7 +193,7 @@
                     </button>
                     <button onclick="switchView('custodyRequestsUser')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
                         <i class="fa-solid fa-hourglass-half"></i>
-                        <span>حالات العهد السابقة</span>
+                        <span>طلبات العهد</span>
                     </button>
                     <button onclick="switchView('settingsView')" class="nav-btn w-full flex items-center space-x-3 rtl:space-x-reverse px-4 py-3 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
                         <i class="fa-solid fa-sliders"></i>
@@ -233,7 +233,7 @@
             <!-- معلومات الموظف الحالي وزر تسجيل الخروج -->
             <div class="p-6 border-t border-slate-800 space-y-3">
                 <div class="text-xs text-slate-400">
-                    <p>المستخدم النشط:</p>
+                    <p>المستخدم الحالي:</p>
                     <p class="font-bold text-white text-sm mt-0.5" id="displayName"></p>
                 </div>
                 <button onclick="logout()" class="w-full bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white py-2 rounded-xl text-sm font-semibold transition flex items-center justify-center space-x-2 rtl:space-x-reverse">
@@ -308,7 +308,7 @@
                 <section id="registerExpenseSec" class="view-sec hidden max-w-xl bg-white p-6 md:p-8 rounded-3xl border border-slate-200 space-y-6">
                     <h3 class="text-lg font-bold text-slate-800 mb-2 flex items-center space-x-2 rtl:space-x-reverse">
                         <i class="fa-solid fa-upload text-teal-600"></i>
-                        <span>قيد فاتورة مصروفات عهدة جديدة</span>
+                        <span>مصروف جديد</span>
                     </h3>
                     <form id="expenseForm" class="space-y-4">
                         <div>
@@ -316,7 +316,7 @@
                             <input type="text" id="expStoreName" required class="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-600 mb-1">الرقم الضريبي للمنشأة (اختياري)</label>
+                            <label class="block text-sm font-semibold text-slate-600 mb-1">الرقم الضريبي</label>
                             <input type="text" id="expTaxNumber" class="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none" placeholder="مكون من 15 خانة" oninput="calculateTax()">
                         </div>
                         <div class="grid grid-cols-2 gap-4">
@@ -367,14 +367,14 @@
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="bg-white p-6 rounded-2xl border border-slate-200 flex items-center justify-between">
                             <div>
-                                <p class="text-sm text-slate-400 font-semibold">إجمالي مصروفات الشركة</p>
+                                <p class="text-sm text-slate-400 font-semibold">إجمالي المصروفات </p>
                                 <h3 id="totalExpenses" class="text-2xl font-bold mt-1 text-rose-600">0.00 ر.س</h3>
                             </div>
                             <div class="p-3 bg-rose-50 text-rose-600 rounded-xl"><i class="fa-solid fa-arrow-trend-up text-lg"></i></div>
                         </div>
                         <div class="bg-white p-6 rounded-2xl border border-slate-200 flex items-center justify-between">
                             <div>
-                                <p class="text-sm text-slate-400 font-semibold">الأرصدة المعلقة بالعهد</p>
+                                <p class="text-sm text-slate-400 font-semibold">ارصدة العهد</p>
                                 <h3 id="totalBalances" class="text-2xl font-bold mt-1 text-teal-600">0.00 ر.س</h3>
                             </div>
                             <div class="p-3 bg-teal-50 text-teal-600 rounded-xl"><i class="fa-solid fa-sack-dollar text-lg"></i></div>
@@ -389,7 +389,7 @@
                     </div>
 
                     <div class="bg-white p-6 rounded-2xl border border-slate-200">
-                        <h3 class="font-bold text-lg text-slate-800 mb-4">توزيع الإنفاق بحسب الأقسام</h3>
+                        <h3 class="font-bold text-lg text-slate-800 mb-4">HAJIB SOFT 2026|نظام ادارة العهد </h3>
                         <div class="relative w-full h-[300px]">
                             <canvas id="deptChart"></canvas>
                         </div>
@@ -767,8 +767,8 @@
                 const { data: user, error } = await supabaseClient
                     .from('users')
                     .select('*')
-                    .eq('username', username.trim())
-                    .single();
+                    .ilike('username', username.trim())
+                    .maybeSingle();
                 
                 if (error || !user) {
                     showToast("اسم المستخدم هذا غير مسجل بالنظام لدينا", "error");
@@ -987,6 +987,27 @@
             }
         }
 
+        // دالة لتحويل الحروف العربية والمسافات إلى حروف إنجليزية متوافقة مع نظام التخزين (Transliteration)
+        function sanitizePathSegment(text) {
+            const charMap = {
+                'أ': 'a', 'إ': 'i', 'آ': 'a', 'ا': 'a',
+                'ب': 'b', 'ت': 't', 'ث': 'th',
+                'ج': 'j', 'ح': 'h', 'خ': 'kh',
+                'د': 'd', 'ذ': 'dh', 'ر': 'r', 'ز': 'z',
+                'س': 's', 'ش': 'sh', 'ص': 's', 'ض': 'd',
+                'ط': 't', 'ظ': 'z', 'ع': 'a', 'غ': 'gh',
+                'ف': 'f', 'ق': 'q', 'ك': 'k', 'ل': 'l',
+                'م': 'm', 'ن': 'n', 'ه': 'h', 'و': 'w', 'ي': 'y', 'ى': 'a',
+                'ة': 'h', 'ئ': 'z', 'ؤ': 'w', 'ء': 'a',
+                ' ': '_', 
+            };
+            
+            return text.split('').map(char => {
+                const lowerChar = char.toLowerCase();
+                return charMap[char] || charMap[lowerChar] || (/[a-zA-Z0-9_\-\.]/.test(char) ? char : '');
+            }).join('').replace(/__+/g, '_');
+        }
+
         // دالة مساعدة لرفع الملفات إلى مستودع التخزين في Supabase Storage
         async function uploadInvoiceFile(base64Data, fileName, department) {
             try {
@@ -1000,7 +1021,10 @@
                 const byteArray = new Uint8Array(byteNumbers);
                 const blob = new Blob([byteArray], { type: mimeType });
 
-                const filePath = `${department}/${Date.now()}_${fileName}`;
+                // تنظيف مسار المجلد واسم الملف لتفادي مشكلة الرموز العربية والمسافات
+                const safeDept = sanitizePathSegment(department || "General");
+                const safeFileName = sanitizePathSegment(fileName || "invoice");
+                const filePath = `${safeDept}/${Date.now()}_${safeFileName}`;
 
                 // الرفع المباشر لمستودع التخزين
                 const { data, error } = await supabaseClient.storage
