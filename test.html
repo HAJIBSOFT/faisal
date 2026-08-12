@@ -9,8 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- استدعاء مكتبة Supabase JS SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- استدعاء مكتبة قارئ الـ QR Code (html5-qrcode) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <!-- استدعاء مكتبة قارئ الـ QR Code السريعة والخفيفة (Nimiq QrScanner) -->
+    <script src="https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap');
         body {
@@ -430,7 +430,7 @@
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-slate-100 no-print">
                             <div>
                                 <h3 class="text-lg font-bold text-slate-800">التقارير المالية وحركات العهد التفصيلية</h3>
-                                <p class="text-sm text-slate-400">تابع حركة رصيد عهدة الموظف قبل كل عملية وبعدها بدقة</p>
+                                <p class="text-sm text-slate-400">تابع حركة رصيد عهدة الموظف قبل كل عملية بعدها بدقة</p>
                             </div>
                             <div class="flex flex-wrap gap-2 mt-4 sm:mt-0">
                                 <select id="filterDept" onchange="filterReports()" class="border border-slate-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
@@ -575,12 +575,12 @@
         </div>
     </div>
 
-    <!-- نافذة منبثقة لمسح كود الـ QR مخصصة للهواتف بشكل مريح وأنيق -->
-    <div id="qrScannerModal" class="fixed inset-0 bg-slate-950/90 z-50 hidden flex flex-col justify-between p-4">
+    <!-- نافذة منبثقة لمسح كود الـ QR مخصصة للهواتف بشكل مريح وأنيق (تمت معالجة تمدد الفيديو) -->
+    <div id="qrScannerModal" class="fixed inset-0 bg-slate-950/95 z-50 hidden flex flex-col justify-between p-4">
         <div class="flex justify-between items-center bg-slate-900 text-white px-5 py-4 rounded-2xl border border-slate-800 shadow-2xl max-w-md mx-auto w-full mt-4">
             <div class="flex items-center space-x-3 rtl:space-x-reverse">
                 <span class="text-teal-400 text-xl animate-pulse"><i class="fa-solid fa-qrcode"></i></span>
-                <span class="text-sm font-bold">قارئ الفاتورة الضريبية الذكي</span>
+                <span class="text-sm font-bold">قارئ الفاتورة السريع (ZATCA)</span>
             </div>
             <button type="button" onclick="stopQRScanner()" class="text-slate-400 hover:text-white transition p-1">
                 <i class="fa-solid fa-xmark text-xl"></i>
@@ -588,19 +588,21 @@
         </div>
         
         <div class="flex-1 flex items-center justify-center max-w-md mx-auto w-full py-4">
-            <div class="relative w-full aspect-square max-h-[340px] bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
-                <!-- الوعاء الأساسي لعرض كاميرا المسح -->
-                <div id="qr-reader" class="w-full h-full"></div>
-                <!-- مربع الإرشاد والتوجيه التفاعلي للكاميرا -->
-                <div class="absolute inset-10 border-2 border-dashed border-teal-500/50 rounded-2xl pointer-events-none flex items-center justify-center">
-                    <div class="w-full h-[2px] bg-teal-400 absolute animate-bounce" style="animation-duration: 2s;"></div>
+            <!-- الحاوية المربعة الثابتة للكاميرا لمنع انضغاط الصورة نهائياً -->
+            <div class="relative w-[280px] h-[280px] bg-slate-900 rounded-3xl border-2 border-teal-500/40 overflow-hidden shadow-2xl">
+                <!-- استخدام عنصر الفيديو مع class object-cover لضمان ثبات النسبة والمنع التام للانضغاط -->
+                <video id="qr-video" class="w-full h-full object-cover"></video>
+                
+                <!-- إطار التحديد والمسح البصري التفاعلي -->
+                <div class="absolute inset-8 border border-dashed border-teal-400/50 rounded-2xl pointer-events-none flex items-center justify-center">
+                    <div class="w-full h-[2px] bg-teal-400/70 absolute animate-bounce" style="animation-duration: 2.2s;"></div>
                 </div>
             </div>
         </div>
 
-        <div class="text-center text-slate-400 text-xs pb-8 px-4 max-w-sm mx-auto">
-            <p class="font-semibold text-slate-300">وجه عدسة الكاميرا نحو الرمز المربع بالفاتورة</p>
-            <p class="text-[10px] text-slate-500 mt-1">سيقوم النظام بفك ترميز الفاتورة وملء تفاصيل الحقول تلقائياً.</p>
+        <div class="text-center text-slate-400 text-xs pb-10 px-4 max-w-sm mx-auto">
+            <p class="font-semibold text-slate-300">وجه الكاميرا مباشرة نحو الكود المربع أسفل الفاتورة</p>
+            <p class="text-[10px] text-slate-500 mt-1">تتم القراءة بشكل فوري وتلقائي بمجرد وضوح العدسة.</p>
         </div>
     </div>
 
@@ -621,7 +623,7 @@
         let allExpensesGlobal = [];
         let deptChartInstance = null;
         let realtimeSubscription = null;
-        let html5QrCode = null; // كائن التحكم بقارئ الـ QR
+        let qrScanner = null; // كائن قارئ الـ QR من مكتبة Nimiq
 
         window.onload = function() {
             const savedUser = localStorage.getItem("custody_user");
@@ -805,61 +807,47 @@
             }, 3500);
         }
 
-        // دالة تشغيل كاميرا المسح الضوئي للـ QR
+        // تشغيل كاميرا المسح الضوئي للمستند باستعمال المكتبة الحديثة السريعة
         function startQRScanner() {
             document.getElementById("qrScannerModal").classList.remove("hidden");
-            
-            // تهيئة مكتبة قارئ الـ QR في الحاوية المخصصة
-            html5QrCode = new Html5Qrcode("qr-reader");
-            
-            const qrCodeSuccessCallback = (decodedText, decodedResult) => {
-                // عند قراءة الكود بنجاح، يتم إغلاق الكاميرا ومعالجة النص
-                stopQRScanner();
-                processScannedInvoice(decodedText);
-            };
-            
-            const config = { 
-                fps: 15, 
-                qrbox: { width: 230, height: 230 } 
-            };
-            
-            // طلب تفعيل الكاميرا الخلفية تلقائياً لتناسب الهواتف الذكية
-            html5QrCode.start(
-                { facingMode: "environment" }, 
-                config, 
-                qrCodeSuccessCallback
-            ).catch(err => {
-                console.warn("تعذر تشغيل الكاميرا الخلفية الفورية، جاري المحاولة بشكل عام:", err);
-                html5QrCode.start(
-                    undefined, 
-                    config, 
-                    qrCodeSuccessCallback
-                ).catch(e => {
-                    showToast("يرجى منح صلاحية الكاميرا للمتصفح لإتمام المسح", "error");
-                    document.getElementById("qrScannerModal").classList.add("hidden");
-                });
+            const videoElem = document.getElementById("qr-video");
+
+            // تشغيل محرك مسح الـ QR مع تفضيل الكاميرا الخلفية وتقييد معدل الإطارات للحفاظ على الطاقة والسرعة
+            qrScanner = new QrScanner(
+                videoElem,
+                result => {
+                    const text = (typeof result === 'object' && result.data) ? result.data : result;
+                    stopQRScanner();
+                    processScannedInvoice(text);
+                },
+                {
+                    preferredCamera: 'environment', // تفضيل الكاميرا الخلفية تلقائياً
+                    maxScansPerSecond: 10,
+                    highlightScanRegion: false, // تعطيل الإطارات الافتراضية لمنع تشويه الأبعاد والمحافظة على الشكل المستدير المخصص
+                    highlightCodeOutline: false
+                }
+            );
+
+            qrScanner.start().catch(err => {
+                console.error("خطأ في بدء تشغيل الكاميرا:", err);
+                showToast("تعذر الوصول إلى الكاميرا، يرجى تفعيل الصلاحيات من المتصفح.", "error");
+                document.getElementById("qrScannerModal").classList.add("hidden");
             });
         }
 
-        // إيقاف تشغيل الكاميرا وإغلاق نافذة المسح
+        // إيقاف تشغيل محرك الكاميرا وإغلاق الواجهة
         function stopQRScanner() {
-            if (html5QrCode) {
-                html5QrCode.stop().then(() => {
-                    html5QrCode = null;
-                    document.getElementById("qrScannerModal").classList.add("hidden");
-                }).catch(err => {
-                    console.error("فشل إيقاف الكاميرا:", err);
-                    document.getElementById("qrScannerModal").classList.add("hidden");
-                });
-            } else {
-                document.getElementById("qrScannerModal").classList.add("hidden");
+            if (qrScanner) {
+                qrScanner.destroy(); // تدمير الكائن تماماً لتحرير الموارد فوراً
+                qrScanner = null;
             }
+            document.getElementById("qrScannerModal").classList.add("hidden");
         }
 
         // فك تشفير ترميز TLV الخاص بفاتورة هيئة الزكاة والضريبة والجمارك (ZATCA)
         function decodeZatcaQR(base64Str) {
             try {
-                // إزالة الفراغات إن وجدت
+                // إزالة الفراغات والرموز الزائدة لتجنب أي أخطاء في فك التشفير
                 base64Str = base64Str.trim().replace(/\s/g, '');
                 
                 const binaryString = atob(base64Str);
@@ -918,10 +906,10 @@
                 document.getElementById("expTotal").value = decoded.total.toFixed(2);
                 document.getElementById("expTaxVal").value = decoded.vatAmount.toFixed(2);
 
-                showToast("تم ملء بيانات الفاتورة الضريبية تلقائياً بنجاح ✅", "success");
+                showToast("تمت قراءة وتعبئة بيانات الفاتورة بنجاح ✅", "success");
                 logSystemAction("مسح ذكي للفاتورة", `تم ملء فاتورة تلقائياً من المورد: ${decoded.sellerName} بمبلغ: ${decoded.total} ر.س`);
             } else {
-                showToast("الرمز الممسوح لا يطابق الصيغة المعتمدة للفواتير الضريبية بالمملكة.", "error");
+                showToast("الكود الملتقط لا يطابق المعايير السعودية للفاتورة الضريبية.", "error");
             }
         }
 
