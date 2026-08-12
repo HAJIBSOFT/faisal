@@ -320,13 +320,13 @@
                                     <i class="fa-solid fa-qrcode text-lg"></i>
                                 </span>
                                 <div>
-                                    <h4 class="text-xs font-bold text-teal-900">مسح وتعبئة تلقائية</h4>
-                                    <p class="text-[10px] text-teal-600 mt-0.5">خاص بالفواتير الضريبية (ZATCA) في المملكة</p>
+                                    <h4 class="text-xs font-bold text-teal-900"> تعبئة تلقائية</h4>
+                                    <p class="text-[10px] text-teal-600 mt-0.5">خاص بالفواتير الضريبية </p>
                                 </div>
                             </div>
                             <button type="button" onclick="startQRScanner()" class="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1 rtl:space-x-reverse shadow-md shadow-teal-600/20">
                                 <i class="fa-solid fa-camera"></i>
-                                <span>مسح الرمز</span>
+                                <span>مسح qr</span>
                             </button>
                         </div>
 
@@ -580,7 +580,7 @@
         <div class="flex justify-between items-center bg-slate-900 text-white px-5 py-4 rounded-2xl border border-slate-800 shadow-2xl max-w-md mx-auto w-full mt-4">
             <div class="flex items-center space-x-3 rtl:space-x-reverse">
                 <span class="text-teal-400 text-xl animate-pulse"><i class="fa-solid fa-qrcode"></i></span>
-                <span class="text-sm font-bold">قارئ الفاتورة السريع (ZATCA)</span>
+                <span class="text-sm font-bold">قارى الفواتير الضريبية</span>
             </div>
             <button type="button" onclick="stopQRScanner()" class="text-slate-400 hover:text-white transition p-1">
                 <i class="fa-solid fa-xmark text-xl"></i>
@@ -830,7 +830,7 @@
 
             qrScanner.start().catch(err => {
                 console.error("خطأ في بدء تشغيل الكاميرا:", err);
-                showToast("تعذر الوصول إلى الكاميرا، يرجى تفعيل الصلاحيات من المتصفح.", "error");
+                showToast("تسوق امها , مقفل الكاميرا وتبي تعبئة تلقائية", "error");
                 document.getElementById("qrScannerModal").classList.add("hidden");
             });
         }
